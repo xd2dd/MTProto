@@ -15,32 +15,29 @@ echo "🚀 Запуск MTProto прокси с Fake TLS"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "📌 Используем домен: ${BLUE}${FAKE_DOMAIN}${NC}"
 
-# Генерируем секрет для Fake TLS
+# Генерируем правильный секрет для Fake TLS (формат: ee + 16 байт ключа + hex домена)
 echo -n "🔑 Генерация Fake TLS секрета... "
 
-# Получаем hex домена ya.ru
+# Генерируем 16 случайных байт (32 hex символа)
+KEY=$(openssl rand -hex 16)
+
+# Получаем hex домена
 DOMAIN_HEX=$(echo -n $FAKE_DOMAIN | xxd -ps | tr -d '\n')
-echo -e "\n   hex домена: ${DOMAIN_HEX}"
 
-# Дополняем случайными символами до 30 символов
-DOMAIN_LEN=${#DOMAIN_HEX}
-NEEDED=$((30 - DOMAIN_LEN))
-RANDOM_HEX=$(openssl rand -hex 15 | cut -c1-$NEEDED)
+# Собираем секрет в правильном формате
+SECRET="ee${KEY}${DOMAIN_HEX}"
 
-# Собираем секрет
-SECRET="ee${DOMAIN_HEX}${RANDOM_HEX}"
-
-echo -e "   Случайное дополнение: ${RANDOM_HEX}"
+echo -e "${GREEN}готово${NC}"
 echo -e "   Секрет: ${YELLOW}${SECRET}${NC}"
-echo "   Длина: ${#SECRET} символов"
+echo "   Длина: ${#SECRET} символов (должно быть 44)"
 
-# Проверяем, свободен ли порт 443
-echo -n "🔍 Проверка порта ${PORT}... "
-if ss -tuln | grep -q ":${PORT} "; then
+# Проверяем, свободен ли порт 443 (только IPv4)
+echo -n "🔍 Проверка порта ${PORT} (IPv4)... "
+if ss -4tuln | grep -q ":${PORT} "; then
     echo -e "${YELLOW}порт занят${NC}"
     # Ищем альтернативный порт
     for alt_port in 8443 8444 8445; do
-        if ! ss -tuln | grep -q ":${alt_port} "; then
+        if ! ss -4tuln | grep -q ":${alt_port} "; then
             PORT=$alt_port
             echo "   Используем порт: ${PORT}"
             break
@@ -50,31 +47,39 @@ else
     echo -e "${GREEN}свободен${NC}"
 fi
 
-# Останавливаем старый контейнер, если есть
+# Останавливаем старый контейнер, если есть (с подавлением ошибок)
 echo -n "🛑 Остановка старого контейнера... "
 sudo docker stop ${CONTAINER_NAME} >/dev/null 2>&1
 sudo docker rm ${CONTAINER_NAME} >/dev/null 2>&1
 echo -e "${GREEN}готово${NC}"
 
-# Запускаем официальный прокси от Telegram
-echo -n "📦 Запуск контейнера... "
+# Определяем IPv4 адрес сервера (игнорируем IPv6)
+echo -n "🌐 Определение IPv4 адреса... "
+SERVER_IP=$(curl -4 -s ifconfig.me 2>/dev/null || curl -4 -s icanhazip.com 2>/dev/null || curl -4 -s ipinfo.io/ip 2>/dev/null)
+if [ -z "$SERVER_IP" ]; then
+    SERVER_IP=$(hostname -I | awk '{print $1}')
+fi
+echo -e "${GREEN}${SERVER_IP}${NC}"
+
+# Запускаем официальный прокси от Telegram с принудительным использованием IPv4
+echo -n "📦 Запуск контейнера (только IPv4)... "
 sudo docker run -d \
   --name ${CONTAINER_NAME} \
   --restart unless-stopped \
+  --sysctl net.ipv6.conf.all.disable_ipv6=0 \
   -p ${PORT}:443 \
   -e SECRET="${SECRET}" \
+  -e FORCE_IPV4=1 \
   telegrammessenger/proxy > /dev/null 2>&1
 
 # Проверяем результат
 sleep 3
 if sudo docker ps | grep -q ${CONTAINER_NAME}; then
-    SERVER_IP=$(curl -s ifconfig.me)
-    
     echo -e "${GREEN}✅ УСПЕШНО${NC}"
     echo ""
     echo "📊 ИНФОРМАЦИЯ ДЛЯ ПОДКЛЮЧЕНИЯ:"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "🌐 Сервер: ${SERVER_IP}"
+    echo "🌐 Сервер (IPv4): ${SERVER_IP}"
     echo "🔌 Порт: ${PORT}"
     echo "🔑 Секрет: ${SECRET}"
     echo "🌐 Fake TLS домен: ${FAKE_DOMAIN}"
@@ -97,6 +102,11 @@ EOF
     echo ""
     echo "📋 Логи контейнера:"
     sudo docker logs --tail 5 ${CONTAINER_NAME}
+    
+    # Проверяем, что контейнер использует IPv4
+    echo ""
+    echo "🔍 Проверка сетевых привязок (только IPv4):"
+    sudo ss -4tulpn | grep ${PORT} || echo "   Порт ${PORT} не найден в IPv4"
 else
     echo -e "${RED}❌ ОШИБКА${NC}"
     sudo docker logs ${CONTAINER_NAME}
