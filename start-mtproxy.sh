@@ -31,7 +31,12 @@ echo -e "${GREEN}готово${NC}"
 echo -e "   Секрет: ${YELLOW}${SECRET}${NC}"
 echo "   Длина: ${#SECRET} символов (должно быть 44)"
 
-# Проверяем, свободен ли порт 443 (только IPv4)
+# Удаляем старый контейнер ДО проверки порта
+echo -n "🛑 Удаление старого контейнера... "
+sudo docker rm -f ${CONTAINER_NAME} >/dev/null 2>&1
+echo -e "${GREEN}готово${NC}"
+
+# Проверяем, свободен ли порт (только IPv4)
 echo -n "🔍 Проверка порта ${PORT} (IPv4)... "
 if ss -4tuln | grep -q ":${PORT} "; then
     echo -e "${YELLOW}порт занят${NC}"
@@ -47,13 +52,7 @@ else
     echo -e "${GREEN}свободен${NC}"
 fi
 
-# Останавливаем старый контейнер, если есть (с подавлением ошибок)
-echo -n "🛑 Остановка старого контейнера... "
-sudo docker stop ${CONTAINER_NAME} >/dev/null 2>&1
-sudo docker rm ${CONTAINER_NAME} >/dev/null 2>&1
-echo -e "${GREEN}готово${NC}"
-
-# Определяем IPv4 адрес сервера (игнорируем IPv6)
+# Определяем IPv4 адрес сервера
 echo -n "🌐 Определение IPv4 адреса... "
 SERVER_IP=$(curl -4 -s ifconfig.me 2>/dev/null || curl -4 -s icanhazip.com 2>/dev/null || curl -4 -s ipinfo.io/ip 2>/dev/null)
 if [ -z "$SERVER_IP" ]; then
@@ -61,16 +60,15 @@ if [ -z "$SERVER_IP" ]; then
 fi
 echo -e "${GREEN}${SERVER_IP}${NC}"
 
-# Запускаем официальный прокси от Telegram с принудительным использованием IPv4
-echo -n "📦 Запуск контейнера (только IPv4)... "
+# Запускаем контейнер с правильным образом (nineseconds/mtg)
+echo -n "📦 Запуск контейнера... "
 sudo docker run -d \
   --name ${CONTAINER_NAME} \
   --restart unless-stopped \
   --sysctl net.ipv6.conf.all.disable_ipv6=0 \
   -p ${PORT}:443 \
-  -e SECRET="${SECRET}" \
-  -e FORCE_IPV4=1 \
-  telegrammessenger/proxy > /dev/null 2>&1
+  nineseconds/mtg:2 \
+  simple-run -n 1.1.1.1 -i prefer-ipv4 0.0.0.0:${PORT} ${SECRET} > /dev/null 2>&1
 
 # Проверяем результат
 sleep 3
@@ -103,7 +101,7 @@ EOF
     echo "📋 Логи контейнера:"
     sudo docker logs --tail 5 ${CONTAINER_NAME}
     
-    # Проверяем, что контейнер использует IPv4
+    # Проверяем, что контейнер использует порт
     echo ""
     echo "🔍 Проверка сетевых привязок (только IPv4):"
     sudo ss -4tulpn | grep ${PORT} || echo "   Порт ${PORT} не найден в IPv4"
