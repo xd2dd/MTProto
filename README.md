@@ -23,17 +23,15 @@ sudo apt install docker.io -y
 
 Создайте файл start-mtproxy.sh:
 
-````
-nano start-mtproxy.sh
-````
-
-Скопируйте в него следующий код из файла start-mtproxy.sh (start-mtproxy-v2.sh минорные правки + поддержка MTU)
+```
+wget https://raw.githubusercontent.com/xd2dd/MTproto/refs/heads/main/start-mtproxy-v2.sh
+```
 
 Делаем скрипт исполняемым и запускаем:
 
 ````
-chmod +x start-mtproxy.sh
-./start-mtproxy.sh
+chmod +x start-mtproxy-v2.sh
+./start-mtproxy-v2.sh
 ````
 
 Проверяем работает ли MTproxy
@@ -76,6 +74,30 @@ sudo docker ps
 На десктопе: Настройки → Продвинутые настройки → Тип соединения → Использовать собственный прокси → Добавить прокси → MTProto
 
 Введите IP сервера, порт (обычно 443) и секретный ключ, который сгенерировал скрипт.
+
+# Добавление спонсор кожа
+
+Перейдите в Telegram бота [@MTProxyBot](https://t.me/MTProxyBot)
+
+Заполните информацию о своем прокси
+
+Перейдите в свои прокси и настройте рекламу
+
+Далее установите скрипт
+
+
+```
+wget https://raw.githubusercontent.com/xd2dd/MTproto/refs/heads/main/update-mtproxy.sh
+```
+
+Делаем скрипт исполняемым и запускаем:
+
+````
+chmod +x update-mtproxy.sh
+./update-mtproxy.sh
+````
+Везде прожимайте да, до момента ADS ID
+Там надо заполнить и контейнер сам перезапустится
 
 # Заключение
 
